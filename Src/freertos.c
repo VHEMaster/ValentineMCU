@@ -21,6 +21,8 @@
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
 #include "task.h"
+#include "effects.h"
+#include "outputs.h"
 #include "main.h"
 #include "sst25vf032b.h"
 #include "mp3common.h"
@@ -49,18 +51,21 @@ extern SPI_HandleTypeDef hspi4;
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim6;
+extern TIM_HandleTypeDef htim7;
 static osMessageQueueId_t queueDacL;
 static osMessageQueueId_t queueDacR;
 static osMessageQueueId_t queueSpiResetTx;
 static osMessageQueueId_t queueSpiResetRx;
 static osMessageQueueId_t queueBufferNumber;
 
-void StartDisplayTask(void *argument)
+
+void StartControlTask(void *argument)
 {
-  for(;;)
-  {
-    osDelay(1);
-  }
+
+  effect_start(&htim7);
+
+
+
 }
 
 

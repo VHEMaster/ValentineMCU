@@ -62,7 +62,7 @@ WWDG_HandleTypeDef hwwdg;
 
 /* Definitions for defaultTask */
 osThreadId_t playbackTaskHandle;
-osThreadId_t displayTaskHandle;
+osThreadId_t controlTaskHandle;
 osThreadId_t spireadTaskHandle;
 const osThreadAttr_t default1Task_attributes = {
   .name = "defaultTask",
@@ -97,7 +97,7 @@ static void MX_TIM7_Init(void);
 static void MX_TIM8_Init(void);
 static void MX_WWDG_Init(void);
 extern void StartPlaybackTask(void *argument);
-extern void StartDisplayTask(void *argument);
+extern void StartControlTask(void *argument);
 extern void StartSpiReadTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -179,7 +179,7 @@ int main(void)
   /* Create the thread(s) */
   /* creation of defaultTask */
   playbackTaskHandle = osThreadNew(StartPlaybackTask, NULL, &default2Task_attributes);
-  displayTaskHandle = osThreadNew(StartDisplayTask, NULL, &default3Task_attributes);
+  controlTaskHandle = osThreadNew(StartControlTask, NULL, &default3Task_attributes);
   spireadTaskHandle = osThreadNew(StartSpiReadTask, NULL, &default1Task_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
