@@ -55,10 +55,10 @@ extern TIM_HandleTypeDef htim7;
 extern TIM_HandleTypeDef htim8;
 extern IWDG_HandleTypeDef hiwdg;
 
-static uint8_t FlashBuffers[FLASH_BUFFER_COUNT][FLASH_BUFFER_SIZE];
+static uint8_t FlashBuffers[FLASH_BUFFER_COUNT][FLASH_BUFFER_SIZE] __attribute__((aligned(32)));
 static uint16_t DacBufferL[SAMPLING_BUFFER_SIZE] __attribute__((aligned(32)));
 static uint16_t DacBufferR[SAMPLING_BUFFER_SIZE] __attribute__((aligned(32)));
-static uint16_t AdcBuffer[ADC_BUFFER_SIZE];
+static uint16_t AdcBuffer[ADC_BUFFER_SIZE] __attribute__((aligned(32)));
 static int16_t Mp3Buffer[MP3_BUFFER_SIZE];
 static uint32_t DacPointerL = 0;
 static uint32_t DacPointerR = 0;
@@ -101,13 +101,15 @@ const osThreadAttr_t displayTask_attributes = {
 };
 
 
-static void ADC_Handle(uint16_t * data, uint32_t size)
+static inline void ADC_Handle(uint16_t * data, uint32_t size)
 {
   uint32_t vbat = 0;
   uint32_t chrg = 0;
   float isUsbVbus = HAL_GPIO_ReadPin(USB_VBUS_GPIO_Port, USB_VBUS_Pin) == GPIO_PIN_SET ? 1.f : 0.f;
   float isCharging = HAL_GPIO_ReadPin(MCU_CHRG_GPIO_Port, MCU_CHRG_Pin) == GPIO_PIN_RESET ? 1.f : 0.f;
   float isCharged = HAL_GPIO_ReadPin(MCU_STBY_GPIO_Port, MCU_STBY_Pin) == GPIO_PIN_RESET ? 1.f : 0.f;
+
+  SCB_InvalidateDCache_by_Addr((uint32_t*)data, size * sizeof(uint16_t));
   for(int i = 0; i < size;)
   {
     vbat += data[i++];

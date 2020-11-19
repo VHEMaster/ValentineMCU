@@ -42,10 +42,8 @@ static uint32_t TABLE_AND[COUNT_CATHODES] =
     0x3FFFFFF
 };
 
-static uint32_t LEDS_COMPLETE_DATA[COUNT_CATHODES][BRIGHT_MAX];
-
-volatile static int8_t irq_counter = 0;
-volatile static int8_t irq_brightcounter = -1;
+static int8_t irq_counter = 0;
+static int8_t irq_brightcounter = -1;
 
 static inline void AnodesEnable(uint32_t data)
 {
@@ -114,27 +112,11 @@ void effect_stop(void)
   }
 }
 
-static void update_led_data(void)
-{
-  //Probably we should do it outside of ISR? 19968 iterations seems too lot.
-  uint32_t data = 0;
-  for(int c = 0; c < COUNT_CATHODES; c++)
-  {
-    for(int b = 0; b < BRIGHT_MAX; b++)
-    {
-      data = LED[c] & TABLE_AND[c];
-      for(int a = 0; a < COUNT_ANODES; a++)
-          data &= ~((BRIGHT[c][a] > b) << a);
-      LEDS_COMPLETE_DATA[c][b] = data;
-    }
-  }
-}
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   if(htim->Instance == TIM7)
   {
-
     if(++irq_brightcounter >= BRIGHT_MAX)
     {
       AnodesDisable();
@@ -143,18 +125,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       if(++irq_counter >= COUNT_CATHODES)
       {
         irq_counter = 0;
-        update_led_data();
+        //VSync event? :)
       }
+
     }
     else
     {
       CathodeEnable(irq_counter);
-      AnodesEnable(LEDS_COMPLETE_DATA[irq_counter][irq_brightcounter]);
+
+      uint32_t data = LED[irq_counter] & TABLE_AND[irq_counter];
+      for(int a = 0; a < COUNT_ANODES; a++)
+          data &= ~((BRIGHT[irq_counter][a] > irq_brightcounter) << a);
+
+      AnodesEnable(data);
     }
   }
 }
-
-
 
 static void SetRowSpecBrightness(uint8_t row, uint32_t data, uint8_t br)
 {
@@ -351,7 +337,8 @@ void effect_fill_special(uint8_t dir)
 			HAL_RNG_GenerateRandomNumber(&hrng, &random);
 			random %= notfilledcnt;
 
-			LED[notfilled[random]/COUNT_ANODES] |= 1<<(notfilled[random]%COUNT_ANODES);
+      LED[notfilled[random]/COUNT_ANODES] |= 1<<(notfilled[random]%COUNT_ANODES);
+      BRIGHT[notfilled[random]/COUNT_ANODES][notfilled[random]%COUNT_ANODES] = BRIGHT_MAX;
 			//DelayUs((notfilledcnt*notfilledcnt)/50.0f);
 			osDelay(4);
 		}

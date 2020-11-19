@@ -15,6 +15,9 @@ static const osMutexAttr_t mutexAttrs = {
   .cb_size = 0
 };
 
+static uint8_t tx[32] __attribute__((aligned(32)));
+static uint8_t rx[32] __attribute__((aligned(32)));
+
 inline void SST25_TxCpltCallback(SPI_HandleTypeDef * _hspi)
 {
   if(_hspi == hspi)
@@ -58,12 +61,21 @@ static inline void waitTxRxCplt()
 
 static inline HAL_StatusTypeDef SPI_CheckChip(void)
 {
-  uint8_t tx[6] = {0x90,0,0,0,0,0};
-  uint8_t rx[6];
+  tx[0] = 0x90;
+  tx[1] = 0;
+  tx[2] = 0;
+  tx[3] = 0;
+  tx[4] = 0;
+  tx[5] = 0;
+
+  SCB_CleanDCache_by_Addr((uint32_t*)tx, 6);
+
   SPI_NSS_ON();
-  HAL_SPI_TransmitReceive_DMA(hspi, tx, rx, sizeof(tx));
+  HAL_SPI_TransmitReceive_DMA(hspi, tx, rx, 6);
   waitTxRxCplt();
   SPI_NSS_OFF();
+
+  SCB_InvalidateDCache_by_Addr((uint32_t*)rx, 6);
 
   if(rx[4] != 0xBF)
     return HAL_ERROR;
@@ -75,13 +87,24 @@ static inline HAL_StatusTypeDef SPI_CheckChip(void)
 
 static inline void SPI_Read(uint32_t address, uint32_t size, uint8_t * buffer)
 {
-  uint8_t tx[5] = {0x0B, (address >> 16) & 0xFF, (address >> 8) & 0xFF, address & 0xFF, 0xFF};
+  tx[0] = 0x0B;
+  tx[1] = (address >> 16) & 0xFF;
+  tx[2] = (address >> 8) & 0xFF;
+  tx[3] = address & 0xFF;
+  tx[4] = 0xFF;
+
+  SCB_CleanDCache_by_Addr((uint32_t*)tx, 5);
+
   SPI_NSS_ON();
-  HAL_SPI_Transmit_DMA(hspi, tx, sizeof(tx));
+  HAL_SPI_Transmit_DMA(hspi, tx, 5);
   waitTxCplt();
   HAL_SPI_Receive_DMA(hspi, buffer, size);
   waitRxCplt();
   SPI_NSS_OFF();
+
+  if((uint32_t)buffer % 32 == 0)
+    SCB_InvalidateDCache_by_Addr((uint32_t*)buffer, size);
+  else SCB_InvalidateDCache_by_Addr((uint32_t*)((uint32_t)buffer - ((uint32_t)buffer%32)), size + ((uint32_t)buffer%32));
 }
 
 

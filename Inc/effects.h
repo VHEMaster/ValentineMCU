@@ -17,6 +17,7 @@ typedef struct
 
 extern void effect_start(TIM_HandleTypeDef * _htim);
 extern void effect_stop(void);
+extern void effect_circle(int time, float anglestart, float angles, float length);
 extern void effect_fill_special(uint8_t dir);
 extern void effect_boot(void);
 extern void effect_fill(uint8_t k);

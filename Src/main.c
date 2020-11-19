@@ -642,6 +642,7 @@ static void MX_IWDG_Init(void)
   {
     Error_Handler();
   }
+  __HAL_DBGMCU_FREEZE_IWDG();
 
 }
 
