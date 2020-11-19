@@ -64,19 +64,19 @@ WWDG_HandleTypeDef hwwdg;
 osThreadId_t playbackTaskHandle;
 osThreadId_t controlTaskHandle;
 osThreadId_t spireadTaskHandle;
-const osThreadAttr_t default1Task_attributes = {
-  .name = "defaultTask",
+const osThreadAttr_t playbackTask_attributes = {
+  .name = "playbackTask",
   .priority = (osPriority_t) osPriorityBelowNormal,
   .stack_size = 4096 * 4
 };
-const osThreadAttr_t default2Task_attributes = {
-  .name = "defaultTask",
-  .priority = (osPriority_t) osPriorityNormal,
+const osThreadAttr_t controlTask_attributes = {
+  .name = "controlTask",
+  .priority = (osPriority_t) osPriorityHigh,
   .stack_size = 4096 * 4
 };
-const osThreadAttr_t default3Task_attributes = {
-  .name = "defaultTask",
-  .priority = (osPriority_t) osPriorityAboveNormal,
+const osThreadAttr_t spireadTask_attributes = {
+  .name = "spireadTask",
+  .priority = (osPriority_t) osPriorityNormal,
   .stack_size = 4096 * 4
 };
 /* USER CODE BEGIN PV */
@@ -178,9 +178,9 @@ int main(void)
 
   /* Create the thread(s) */
   /* creation of defaultTask */
-  playbackTaskHandle = osThreadNew(StartPlaybackTask, NULL, &default2Task_attributes);
-  controlTaskHandle = osThreadNew(StartControlTask, NULL, &default3Task_attributes);
-  spireadTaskHandle = osThreadNew(StartSpiReadTask, NULL, &default1Task_attributes);
+  playbackTaskHandle = osThreadNew(StartPlaybackTask, NULL, &playbackTask_attributes);
+  controlTaskHandle = osThreadNew(StartControlTask, NULL, &controlTask_attributes);
+  spireadTaskHandle = osThreadNew(StartSpiReadTask, NULL, &spireadTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -286,7 +286,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.DataAlign = ADC_DATAALIGN_LEFT;
   hadc1.Init.NbrOfConversion = 2;
   hadc1.Init.DMAContinuousRequests = ENABLE;
-  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_SEQ_CONV;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
   {
     Error_Handler();
@@ -599,7 +599,7 @@ static void MX_TIM8_Init(void)
   htim8.Instance = TIM8;
   htim8.Init.Prescaler = 0;
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 9999;
+  htim8.Init.Period = 780;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -815,9 +815,12 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : USB_VBUS_Pin */
   GPIO_InitStruct.Pin = USB_VBUS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(USB_VBUS_GPIO_Port, &GPIO_InitStruct);
+
+  HAL_NVIC_SetPriority(EXTI9_5_IRQn, 2, 0);
+  HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
 
 }
 

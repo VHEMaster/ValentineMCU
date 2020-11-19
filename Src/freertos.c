@@ -34,46 +34,244 @@
 #define FLASH_BUFFER_SIZE 2048
 #define FLASH_BUFFER_COUNT 16
 
+#define ADC_BUFFER_SIZE 512
+#define ADC_KOFF 0.005f
+#define ADC_VREF 3.3f
+#define ADC_DIVIDER 2.0f
+
 #define INTERNAL_BUFFER_SIZE (FLASH_BUFFER_SIZE * 8)
 
-static uint8_t FlashBuffers[FLASH_BUFFER_COUNT][FLASH_BUFFER_SIZE];
 
 #define BUFFER_HALF_CPLT 1
 #define BUFFER_FULL_CPLT 2
 
-static uint16_t DacBufferL[SAMPLING_BUFFER_SIZE] __attribute__((aligned(32)));
-static uint16_t DacBufferR[SAMPLING_BUFFER_SIZE] __attribute__((aligned(32)));
-static int16_t Mp3Buffer[MP3_BUFFER_SIZE];
-static volatile uint32_t DacPointerL = 0;
-static volatile uint32_t DacPointerR = 0;
-
+extern ADC_HandleTypeDef hadc1;
 extern SPI_HandleTypeDef hspi4;
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim6;
 extern TIM_HandleTypeDef htim7;
+extern TIM_HandleTypeDef htim8;
+
+static uint8_t FlashBuffers[FLASH_BUFFER_COUNT][FLASH_BUFFER_SIZE];
+static uint16_t DacBufferL[SAMPLING_BUFFER_SIZE] __attribute__((aligned(32)));
+static uint16_t DacBufferR[SAMPLING_BUFFER_SIZE] __attribute__((aligned(32)));
+static uint16_t AdcBuffer[ADC_BUFFER_SIZE];
+static int16_t Mp3Buffer[MP3_BUFFER_SIZE];
+static uint32_t DacPointerL = 0;
+static uint32_t DacPointerR = 0;
+static float adcVBATraw = 0.f;
+static float adcCHRGraw = 0.f;
+
+static volatile float pwrCharged = 0.f;
+static volatile float pwrCharging = 0.f;
+static volatile float pwrUsbVbus = 0.f;
+static volatile float adcVBAT = 0.f;
+static volatile float adcCHRG = 0.f;
+
 static osMessageQueueId_t queueDacL;
 static osMessageQueueId_t queueDacR;
 static osMessageQueueId_t queueSpiResetTx;
 static osMessageQueueId_t queueSpiResetRx;
 static osMessageQueueId_t queueBufferNumber;
 
+static osThreadId_t displayTaskHandle;
 
-void StartControlTask(void *argument)
+static void StartDisplayTask(void *argument);
+
+typedef enum
 {
+  CS_Undefined = -1,
+  CS_Working,
+  CS_BatteryLow,
+  CS_Charging,
+  CS_Charged,
+  CS_BatteryWarning,
+} CurStatus_t;
 
+static CurStatus_t currentStatus = CS_Undefined;
+
+
+const osThreadAttr_t displayTask_attributes = {
+  .name = "displayTask",
+  .priority = (osPriority_t) osPriorityAboveNormal,
+  .stack_size = 4096 * 4
+};
+
+
+static void ADC_Handle(uint16_t * data, uint32_t size)
+{
+  uint32_t vbat = 0;
+  uint32_t chrg = 0;
+  float isUsbVbus = HAL_GPIO_ReadPin(USB_VBUS_GPIO_Port, USB_VBUS_Pin) == GPIO_PIN_SET ? 1.f : 0.f;
+  float isCharging = HAL_GPIO_ReadPin(MCU_CHRG_GPIO_Port, MCU_CHRG_Pin) == GPIO_PIN_RESET ? 1.f : 0.f;
+  float isCharged = HAL_GPIO_ReadPin(MCU_STBY_GPIO_Port, MCU_STBY_Pin) == GPIO_PIN_RESET ? 1.f : 0.f;
+  for(int i = 0; i < size;)
+  {
+    vbat += data[i++];
+    chrg += data[i++];
+  }
+
+  adcVBATraw = adcVBATraw * (1.0f - ADC_KOFF) + vbat * ADC_KOFF;
+  adcCHRGraw = adcCHRGraw * (1.0f - ADC_KOFF) + chrg * ADC_KOFF;
+
+  adcVBAT = adcVBATraw / size / 65536.0f * ADC_DIVIDER * ADC_VREF;
+  adcCHRG = adcCHRGraw / size / 65536.0f * ADC_DIVIDER * ADC_VREF;
+
+  pwrUsbVbus = pwrUsbVbus * (1.0f - ADC_KOFF) + isUsbVbus * ADC_KOFF;
+  pwrCharging = pwrCharging * (1.0f - ADC_KOFF) + isCharging * ADC_KOFF;
+  pwrCharged = pwrCharged * (1.0f - ADC_KOFF) + isCharged * ADC_KOFF;
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+  if(hadc == &hadc1)
+  {
+    ADC_Handle(&AdcBuffer[ADC_BUFFER_SIZE / 2], ADC_BUFFER_SIZE / 2);
+  }
+}
+
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef* hadc)
+{
+  if(hadc == &hadc1)
+  {
+    ADC_Handle(&AdcBuffer[0], ADC_BUFFER_SIZE / 2);
+  }
+}
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if((GPIO_Pin & USB_VBUS_Pin) == USB_VBUS_Pin)
+  {
+    if(HAL_GPIO_ReadPin(USB_VBUS_GPIO_Port, USB_VBUS_Pin) == GPIO_PIN_RESET)
+    {
+      HAL_GPIO_WritePin(MCU_CE_GPIO_Port, MCU_CE_Pin, GPIO_PIN_RESET);
+      pwrCharging = 0.0f;
+      pwrCharged = 0.0f;
+      pwrUsbVbus = 0.0f;
+    }
+  }
+}
+
+#define IS_USB_VBUS (pwrUsbVbus > 0.7f)
+#define IS_CHARGING (pwrCharging > 0.7f)
+#define IS_CHARGED (pwrCharged > 0.7f)
+
+void StartDisplayTask(void *argument)
+{
   effect_start(&htim7);
+  CurStatus_t status = *(CurStatus_t *)argument;
 
+  if(status == CS_Working)
+    out_main();
+  else if(status == CS_BatteryLow)
+    out_batterylow();
+  else if(status == CS_Charging)
+    out_charging();
+  else if(status == CS_Charged)
+    out_charging();
 
+  effect_stop();
+  taskENTER_CRITICAL();
+  displayTaskHandle = NULL;
+  vTaskDelete(NULL);
+  taskEXIT_CRITICAL();
 
+  while(1) osDelay(1000);
 }
 
 
-static HMP3Decoder MP3;
-static MP3FrameInfo MP3Info;
-static int samplerate = 0;
-static int curbuffersize = 0;
-static uint8_t isplaying = 0;
+void StartControlTask(void *argument)
+{
+  const uint32_t period = 100;
+  CurStatus_t oldStatus = CS_Undefined;
+  uint32_t low_period = 0;
+  uint32_t usb_period = 0;
+  float temp;
+
+  HAL_GPIO_WritePin(MCU_CE_GPIO_Port, MCU_CE_Pin, GPIO_PIN_RESET);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)AdcBuffer, ADC_BUFFER_SIZE);
+  HAL_TIM_Base_Start(&htim8);
+
+  while(1)
+  {
+    if(currentStatus != oldStatus)
+    {
+      oldStatus = currentStatus;
+      if((oldStatus != CS_Charging || currentStatus != CS_Charged) && (oldStatus != CS_Charged || currentStatus != CS_Charging))
+      {
+        if(displayTaskHandle != NULL)
+        {
+          taskENTER_CRITICAL();
+          vTaskDelete(displayTaskHandle);
+          displayTaskHandle = NULL;
+          taskEXIT_CRITICAL();
+          effect_stop();
+        }
+      }
+
+      if(currentStatus == CS_BatteryLow || currentStatus == CS_Charging || currentStatus == CS_Charged || currentStatus == CS_Working)
+      {
+        if(displayTaskHandle == NULL)
+        {
+          taskENTER_CRITICAL();
+          displayTaskHandle = osThreadNew(StartDisplayTask, &currentStatus, &displayTask_attributes);
+          taskEXIT_CRITICAL();
+        }
+      }
+    }
+
+    osDelay(period);
+
+    if(IS_USB_VBUS)
+    {
+      if(usb_period >= 500)
+      {
+        HAL_GPIO_WritePin(MCU_CE_GPIO_Port, MCU_CE_Pin, GPIO_PIN_SET);
+        if(IS_CHARGING && !IS_CHARGED)
+        {
+          temp = adcCHRG - 3.5f * 1.43f;
+          if(temp > 1.f) temp = 0.98f;
+          else if(temp < 0.f) temp = 0.f;
+          out_updatecharginglevel(temp);
+          currentStatus = CS_Charging;
+          low_period = 0;
+          continue;
+        }
+        else if(IS_CHARGED && !IS_CHARGING)
+        {
+          out_updatecharginglevel(1.f);
+          currentStatus = CS_Charged;
+          low_period = 0;
+          continue;
+        }
+      }
+      else
+        usb_period += period;
+    }
+    else
+    {
+      HAL_GPIO_WritePin(MCU_CE_GPIO_Port, MCU_CE_Pin, GPIO_PIN_RESET);
+      usb_period = 0;
+    }
+
+    if(adcVBAT < 3.3f)
+    {
+      if(currentStatus == CS_Working)
+      {
+        if(currentStatus != CS_BatteryLow && low_period > 3000)
+          currentStatus = CS_BatteryLow;
+        low_period += period;
+      }
+    }
+    else
+    {
+      if(currentStatus == CS_Working)
+        low_period = 0;
+      else if(currentStatus != CS_BatteryLow)
+        currentStatus = CS_Working;
+    }
+  }
+}
 
 
 static void MP3_PeriodElapsedCplt(DMA_HandleTypeDef *hdma)
@@ -93,6 +291,10 @@ static void MP3_PeriodElapsedHalfCplt(DMA_HandleTypeDef *hdma)
   else if(hdma == htim6.hdma[TIM_DMA_ID_UPDATE])
     osMessageQueuePut(queueDacR, &message, 0, 0);
 }
+
+static int samplerate = 0;
+static int curbuffersize = 0;
+static uint8_t isplaying = 0;
 
 static void StopPlayback(void)
 {
@@ -156,6 +358,9 @@ static void StartPlayback(uint32_t buffersize)
 
 }
 
+static HMP3Decoder mp3Handler;
+static MP3FrameInfo mp3Info;
+
 void StartPlaybackTask(void *argument)
 {
   uint8_t * buffer = pvPortMalloc(INTERNAL_BUFFER_SIZE);
@@ -167,7 +372,7 @@ void StartPlaybackTask(void *argument)
   uint16_t * initialpntl;
   uint16_t * initialpntr;
 
-  MP3 = MP3InitDecoder();
+  mp3Handler = MP3InitDecoder();
   queueDacL = osMessageQueueNew(16, sizeof(uint8_t), NULL);
   queueDacR = osMessageQueueNew(16, sizeof(uint8_t), NULL);
   queueSpiResetRx = osMessageQueueNew(2, sizeof(uint8_t), NULL);
@@ -187,9 +392,10 @@ void StartPlaybackTask(void *argument)
       memcpy(&buffer[size], FlashBuffers[message], FLASH_BUFFER_SIZE);
       size += FLASH_BUFFER_SIZE;
     }
+    mp3buffer = buffer;
 
-    if(buffer[0] == 0xFF && buffer[1] == 0xFF &&
-        buffer[2] == 0xFF && buffer[3] == 0xFF)
+    if(mp3buffer[0] == 0xFF && mp3buffer[1] == 0xFF &&
+        mp3buffer[2] == 0xFF && mp3buffer[3] == 0xFF)
     {
       status = osMessageQueuePut(queueSpiResetTx, &message, 0, 50);
       for(int i = 0; i < curbuffersize; i++)
@@ -201,7 +407,7 @@ void StartPlaybackTask(void *argument)
       continue;
     }
 
-    syncword = MP3FindSyncWord(buffer, size);
+    syncword = MP3FindSyncWord(mp3buffer, size);
     if(syncword <= ERR_MP3_INDATA_UNDERFLOW)
     {
       size = 0;
@@ -213,7 +419,7 @@ void StartPlaybackTask(void *argument)
       continue;
     }
 
-    syncword = MP3GetNextFrameInfo(MP3, &MP3Info, buffer);
+    syncword = MP3GetNextFrameInfo(mp3Handler, &mp3Info, mp3buffer);
     if(syncword != ERR_MP3_NONE)
     {
       if(size > 2)
@@ -221,8 +427,7 @@ void StartPlaybackTask(void *argument)
       continue;
     }
 
-    mp3buffer = buffer;
-    syncword = MP3Decode(MP3, &mp3buffer, &size, Mp3Buffer, 0);
+    syncword = MP3Decode(mp3Handler, &mp3buffer, &size, Mp3Buffer, 0);
     if(syncword != ERR_MP3_NONE)
     {
       if(size > 2)
@@ -230,11 +435,11 @@ void StartPlaybackTask(void *argument)
       continue;
     }
 
-    MP3GetLastFrameInfo(MP3, &MP3Info);
+    MP3GetLastFrameInfo(mp3Handler, &mp3Info);
 
-    if(samplerate != MP3Info.samprate)
+    if(samplerate != mp3Info.samprate)
     {
-      samplerate = MP3Info.samprate;
+      samplerate = mp3Info.samprate;
       switch(samplerate)
       {
         case 96000 :
@@ -263,13 +468,13 @@ void StartPlaybackTask(void *argument)
       }
     }
 
-    if(samplerate == 0 || MP3Info.nChans <= 0)
+    if(samplerate == 0 || mp3Info.nChans <= 0)
       continue;
 
-    if(MP3Info.nChans == 1)
-      StartPlayback(MP3Info.outputSamps * 2);
-    else if(MP3Info.nChans == 2)
-      StartPlayback(MP3Info.outputSamps);
+    if(mp3Info.nChans == 1)
+      StartPlayback(mp3Info.outputSamps * 2);
+    else if(mp3Info.nChans == 2)
+      StartPlayback(mp3Info.outputSamps);
     else continue;
 
     status = osMessageQueueGet(queueDacL, &message, NULL, 150);
@@ -285,12 +490,12 @@ void StartPlaybackTask(void *argument)
     initialpntl = &DacBufferL[DacPointerL];
     initialpntr = &DacBufferR[DacPointerR];
 
-    if(MP3Info.nChans == 1)
-      for(int i = 0; i < MP3Info.outputSamps;)
+    if(mp3Info.nChans == 1)
+      for(int i = 0; i < mp3Info.outputSamps;)
         DacBufferL[DacPointerL++] = DacBufferR[DacPointerR++] = (Mp3Buffer[i++] ^ 0x8000) >> 6;
-    else if(MP3Info.nChans == 2)
+    else if(mp3Info.nChans == 2)
     {
-      for(int i = 0; i < MP3Info.outputSamps;)
+      for(int i = 0; i < mp3Info.outputSamps;)
       {
         DacBufferL[DacPointerL++] = (Mp3Buffer[i++] ^ 0x8000) >> 6;
         DacBufferR[DacPointerR++] = (Mp3Buffer[i++] ^ 0x8000) >> 6;

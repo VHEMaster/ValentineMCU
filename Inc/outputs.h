@@ -13,5 +13,8 @@
 
 extern void out_main(void);
 extern void out_batterylow(void);
+extern void out_charging(void);
+
+extern void out_updatecharginglevel(float level);
 
 #endif /* OUTPUTS_H_ */

@@ -27,4 +27,10 @@ extern void effect_smile(void);
 extern void effect_savestate(LED_SavedStateType * data);
 extern void effect_restorestate(LED_SavedStateType * data);
 extern void effect_putch(char ch, uint8_t x, uint8_t y);
+extern void effect_setbacklighttwohalfspercent(float percent);
+extern void effect_setbacklightpercent(float percent);
+extern void effect_settwohalfspercent(float percent);
+extern void effect_setpercent(float percent);
+extern void effect_setbacklightpercentfromto(float percentfrom, float percentto);
+extern void effect_setpercentfromto(float percentfrom, float percentto);
 

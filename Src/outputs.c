@@ -1,12 +1,97 @@
 #include "outputs.h"
 #include "effects.h"
 
+static volatile float fChargingLevel = 1.f;
+static LED_SavedStateType state_charging;
+
+void out_updatecharginglevel(float level)
+{
+  if(level < 0) fChargingLevel = 0;
+  else if (level > 1.f) fChargingLevel = 1.f;
+  else fChargingLevel = level;
+}
+
+void out_charging(void)
+{
+  uint8_t charging_tick = 1;
+  int8_t menu = 0;
+  effect_fill(0);
+  for(int y = 0; y < COUNT_CATHODES; y++)
+    for(int x = 0; x < COUNT_ANODES; x++)
+      BRIGHT[y][x] = BRIGHT_MAX / 2;
+
+  for(int x = 7; x <= 17; x++)
+  {
+    LED[7] |= 1 << (x + 7);
+    LED[11] |= 1 << (x + 7);
+  }
+  for(int y = 8; y <= 10; y++)
+  {
+    LED[y] |= (1 << 7) | (1 << 17) | (1 << 18);
+  }
+
+  for(int y = 8; y <= 10; y++)
+    for(int x = 8; x <= 16; x++)
+      BRIGHT[y][x] = BRIGHT_MAX / 3;
+
+  effect_savestate(&state_charging);
+
+  while(1)
+  {
+    if(fChargingLevel >= 1.f)
+    {
+      if(menu != 1)
+        effect_restorestate(&state_charging);
+      menu = 1;
+
+      for(int y = 8; y <= 10; y++)
+        for(int x = 8; x <= 16; x++)
+          LED[y] |= (1 << x);
+
+      effect_circle(500, 0.f, 360.f, 90.f);
+      effect_fill_special(1);
+      effect_decreasebright(1000, BRIGHT_MAX / 3);
+      while(fChargingLevel >= 1.f)
+        osDelay(100);
+    }
+    else
+    {
+      if(menu != 0)
+      {
+        charging_tick = 0;
+        effect_restorestate(&state_charging);
+      }
+      int level = fChargingLevel * 8.f; //0-8
+      if(level >= 8) level = 7;
+      else if(level < 0) level = 0;
+      if(charging_tick) level++;
+      for(int y = 8; y <= 10; y++)
+      {
+        for(int x = 8; x <= level + 8; x++)
+        {
+          LED[y] |= (1 << x);
+        }
+        for(int x = level + 8 + 1; x <= 16; x++)
+          LED[y] &= ~(1 << x);
+      }
+      osDelay(500);
+      if(menu != 0)
+      {
+        effect_circle(700, 0.f, 720.f, 90.f);
+      }
+      menu = 0;
+    }
+  }
+
+}
+
+
 void out_batterylow(void)
 {
   effect_fill(0);
   for(int y = 0; y < COUNT_CATHODES; y++)
     for(int x = 0; x < COUNT_ANODES; x++)
-      BRIGHT[y][x] = BRIGHT_MAX / 3;
+      BRIGHT[y][x] = BRIGHT_MAX / 1.5f;
 
   for(int x = 7; x <= 17; x++)
   {
@@ -41,13 +126,13 @@ void out_batterylow(void)
   {
     uint8_t x = 16 - i;
     uint8_t y = 5 + i;
-    BRIGHT[y][x] = BRIGHT_MAX / 1.5f;
+    BRIGHT[y][x] = BRIGHT_MAX / 2;
     LED[y] |= 1 << x;
     osDelay(600 / 9);
   }
 
   osDelay(1000);
-  effect_stop();
+  effect_fill(0);
 }
 
 static LED_SavedStateType state;
