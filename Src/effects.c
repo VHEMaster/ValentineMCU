@@ -154,9 +154,10 @@ static void SetRowSpecBrightness(uint8_t row, uint32_t data, uint8_t br)
 
 void effect_fill(uint8_t k)
 {
-	uint8_t i,j;
+  uint8_t i,j;
+  if(k > 1) k = 1;
 	for(i=0;i<COUNT_CATHODES;i++)
-		LED[i] = k*0x3FFFFFF;
+		LED[i] = TABLE_AND[i] * k;
 	for(i=0;i<COUNT_CATHODES;i++)
 		for(j=0;j<COUNT_ANODES;j++)
 			BRIGHT[i][j] = BRIGHT_MAX;
@@ -183,13 +184,14 @@ void effect_boot(void)
 	osDelay(2000);
 }
 
-char tempstr[255] = {' ',' ',' ',' ',' ',0};
-uint32_t original[7];
-uint32_t original_br[7][COUNT_ANODES];
 
+static char tempstr[255] = {' ',' ',' ',' ',' ',0};
+static uint32_t original_br[7][COUNT_ANODES];
+static uint32_t original[7];
 
 void effect_putch(char ch, uint8_t x, uint8_t y)
 {
+
 	uint8_t k,l;
 	
 	for(k=0;k<7;k++)
@@ -243,12 +245,10 @@ void effect_print(char * text)
 }
 
 
-LED_SavedStateType circlesaving;
+static LED_SavedStateType circlesaving;
 
 void effect_circle(int time, float anglestart, float angles, float length)
 {
-  //To radians
-
   anglestart /= 360.0f;
   angles /= 360.0f;
   length /= 360.0f;
