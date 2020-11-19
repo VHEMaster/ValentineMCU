@@ -58,7 +58,7 @@ TIM_HandleTypeDef htim8;
 DMA_HandleTypeDef hdma_tim4_up;
 DMA_HandleTypeDef hdma_tim6_up;
 
-WWDG_HandleTypeDef hwwdg;
+IWDG_HandleTypeDef hiwdg;
 
 /* Definitions for defaultTask */
 osThreadId_t playbackTaskHandle;
@@ -95,7 +95,7 @@ static void MX_TIM4_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_TIM7_Init(void);
 static void MX_TIM8_Init(void);
-static void MX_WWDG_Init(void);
+static void MX_IWDG_Init(void);
 extern void StartPlaybackTask(void *argument);
 extern void StartControlTask(void *argument);
 extern void StartSpiReadTask(void *argument);
@@ -152,7 +152,7 @@ int main(void)
   MX_TIM6_Init();
   MX_TIM7_Init();
   MX_TIM8_Init();
-  //MX_WWDG_Init();
+  MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -222,7 +222,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 25;
-  RCC_OscInitStruct.PLL.PLLN = 400;
+  RCC_OscInitStruct.PLL.PLLN = 432;
   RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 9;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
@@ -599,7 +599,7 @@ static void MX_TIM8_Init(void)
   htim8.Instance = TIM8;
   htim8.Init.Prescaler = 0;
   htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 780;
+  htim8.Init.Period = HAL_RCC_GetPCLK2Freq() * 2 / 256 / 500;
   htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim8.Init.RepetitionCounter = 0;
   htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -626,32 +626,22 @@ static void MX_TIM8_Init(void)
 }
 
 /**
-  * @brief WWDG Initialization Function
+  * @brief IWDG Initialization Function
   * @param None
   * @retval None
   */
-static void MX_WWDG_Init(void)
+static void MX_IWDG_Init(void)
 {
 
-  /* USER CODE BEGIN WWDG_Init 0 */
-
-  /* USER CODE END WWDG_Init 0 */
-
-  /* USER CODE BEGIN WWDG_Init 1 */
-
-  /* USER CODE END WWDG_Init 1 */
-  hwwdg.Instance = WWDG;
-  hwwdg.Init.Prescaler = WWDG_PRESCALER_1;
-  hwwdg.Init.Window = 64;
-  hwwdg.Init.Counter = 64;
-  hwwdg.Init.EWIMode = WWDG_EWI_DISABLE;
-  if (HAL_WWDG_Init(&hwwdg) != HAL_OK)
+  /* USER CODE END IWDG_Init 1 */
+  hiwdg.Instance = IWDG;
+  hiwdg.Init.Prescaler = IWDG_PRESCALER_32;
+  hiwdg.Init.Reload = 256;
+  hiwdg.Init.Window = 200;
+  if (HAL_IWDG_Init(&hiwdg) != HAL_OK)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN WWDG_Init 2 */
-
-  /* USER CODE END WWDG_Init 2 */
 
 }
 

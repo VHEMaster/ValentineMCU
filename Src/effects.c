@@ -11,8 +11,8 @@ uint32_t LED[COUNT_CATHODES];
 uint8_t BRIGHT[COUNT_CATHODES][COUNT_ANODES] __attribute__ ((aligned (4)));
 
 #define EDGE_HEARTH_SIZE 60
-uint8_t EDGE_HEARTH_ANODES[EDGE_HEARTH_SIZE] = { 12,11,10,9,8,7,6,5,4,3,2,1,1,0,0,0,0,1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,24,25,25,25,25,24,24,23,22,21,20,19,18,17,16,15,14,13 };
-uint8_t EDGE_HEARTH_CATHODES[EDGE_HEARTH_SIZE] = { 2,1,1,0,0,0,0,1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,1,0,0,0,0,1,1,2 };
+const uint8_t EDGE_HEARTH_ANODES[EDGE_HEARTH_SIZE] = { 12,11,10,9,8,7,6,5,4,3,2,1,1,0,0,0,0,1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,24,25,25,25,25,24,24,23,22,21,20,19,18,17,16,15,14,13 };
+const uint8_t EDGE_HEARTH_CATHODES[EDGE_HEARTH_SIZE] = { 2,1,1,0,0,0,0,1,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,22,21,20,19,18,17,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,1,0,0,0,0,1,1,2 };
 
 static uint32_t TABLE_AND[COUNT_CATHODES] =
 {
@@ -88,7 +88,7 @@ void effect_start(TIM_HandleTypeDef * _htim)
   if(!started)
   {
     htim = _htim;
-    htim->Instance->ARR = 100000000 / REFRESH_RATE / (BRIGHT_MAX + 1) / COUNT_CATHODES;
+    htim->Instance->ARR = HAL_RCC_GetPCLK1Freq() * 2.f / REFRESH_RATE / (BRIGHT_MAX + 1) / COUNT_CATHODES;
     irq_counter = 0;
     irq_brightcounter = -1;
     AnodesDisable();
@@ -464,10 +464,10 @@ void effect_savestate(LED_SavedStateType * state)
 {
 	uint16_t i = 0;
 	uint32_t * data = state->data;
-	for(i=0;i<COUNT_CATHODES;i++,data++)
-		*data = LED[i];
-  for(i=0;i<(COUNT_CATHODES*COUNT_ANODES/4);i++,data++)
-		*data = ((uint32_t*)BRIGHT)[i];
+	for(i=0;i<COUNT_CATHODES;i++)
+		*data++ = LED[i];
+  for(i=0;i<(COUNT_CATHODES*COUNT_ANODES/4);i++)
+		*data++ = ((uint32_t*)BRIGHT)[i];
 }
 
 void effect_restorestate(LED_SavedStateType * state)

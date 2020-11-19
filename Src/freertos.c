@@ -27,6 +27,7 @@
 #include "sst25vf032b.h"
 #include "mp3common.h"
 #include <string.h>
+#include <math.h>
 
 #define MP3_BUFFER_SIZE 2304
 #define SAMPLING_BUFFER_SIZE (MP3_BUFFER_SIZE * 2)
@@ -52,6 +53,7 @@ extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim6;
 extern TIM_HandleTypeDef htim7;
 extern TIM_HandleTypeDef htim8;
+extern IWDG_HandleTypeDef hiwdg;
 
 static uint8_t FlashBuffers[FLASH_BUFFER_COUNT][FLASH_BUFFER_SIZE];
 static uint16_t DacBufferL[SAMPLING_BUFFER_SIZE] __attribute__((aligned(32)));
@@ -194,6 +196,7 @@ void StartControlTask(void *argument)
 
   while(1)
   {
+    HAL_IWDG_Refresh(&hiwdg);
     if(currentStatus != oldStatus)
     {
       oldStatus = currentStatus;
@@ -440,32 +443,8 @@ void StartPlaybackTask(void *argument)
     if(samplerate != mp3Info.samprate)
     {
       samplerate = mp3Info.samprate;
-      switch(samplerate)
-      {
-        case 96000 :
-          htim4.Instance->ARR = 1041;
-          htim6.Instance->ARR = 1041;
-          break;
-        case 48000 :
-          htim4.Instance->ARR = 2082;
-          htim6.Instance->ARR = 2082;
-          break;
-        case 44100 :
-          htim4.Instance->ARR = 2267;
-          htim6.Instance->ARR = 2267;
-          break;
-        case 22050 :
-          htim4.Instance->ARR = 4534;
-          htim6.Instance->ARR = 4534;
-          break;
-        case 11025 :
-          htim4.Instance->ARR = 9069;
-          htim6.Instance->ARR = 9069;
-          break;
-        default :
-          samplerate = 0;
-          break;
-      }
+      htim4.Instance->ARR = roundf((float)HAL_RCC_GetPCLK1Freq() * 2.f / (float)samplerate - 1.f);
+      htim6.Instance->ARR = roundf((float)HAL_RCC_GetPCLK1Freq() * 2.f / (float)samplerate - 1.f);
     }
 
     if(samplerate == 0 || mp3Info.nChans <= 0)

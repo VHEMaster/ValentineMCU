@@ -186,12 +186,12 @@ void out_main(void)
   {
 
     osDelay(1000);
-    effect_print("");
-    effect_fill_special(3);
+    effect_print("String 1");
+    effect_fill_special(1);
     osDelay(500);
-    effect_print("");
-    effect_print("");
-    effect_print("");
+    effect_print("String 2");
+    effect_print("String 3");
+    effect_print("String 4");
     effect_smile();
     effect_decreasebright(1500, BRIGHT_MAX / 3);
     osDelay(1000);

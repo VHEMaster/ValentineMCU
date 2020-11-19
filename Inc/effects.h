@@ -12,7 +12,7 @@ extern uint8_t BRIGHT[COUNT_CATHODES][COUNT_ANODES];
 
 typedef struct
 {
-    uint32_t data[COUNT_ANODES * COUNT_CATHODES / 4 + COUNT_CATHODES];
+    uint32_t data[(sizeof(LED) + sizeof(BRIGHT)) / sizeof(uint32_t)];
 } LED_SavedStateType;
 
 extern void effect_start(TIM_HandleTypeDef * _htim);
