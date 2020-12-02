@@ -140,6 +140,10 @@ static LED_SavedStateType state_nolet;
 void out_main(void)
 {
   effect_boot();
+  effect_backlightcircle(500, 0, -360, -20);
+  osDelay(100);
+  effect_circle(500, 0, 360, 20);
+  osDelay(100);
   effect_fill_special(3);
   osDelay(1000);
   effect_decreasebright(800, BRIGHT_MAX / 3);

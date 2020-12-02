@@ -81,6 +81,40 @@ static inline void CathodeEnable(uint8_t index)
 
 static volatile uint8_t started = 0;
 
+static inline void EnableLed(uint8_t anode, uint8_t cathode, uint8_t bright)
+{
+  if(cathode < COUNT_CATHODES || anode < COUNT_ANODES)
+  {
+    LED[cathode] |= 1 << anode;
+    BRIGHT[cathode][anode] = bright;
+  }
+}
+
+static inline void EnableLedMirror(uint8_t anode, uint8_t cathode, uint8_t bright)
+{
+  if(cathode < COUNT_CATHODES || anode < COUNT_ANODES)
+  {
+    LED[cathode] |= (1 << anode) | (1 << (COUNT_ANODES - 1 - anode));
+    BRIGHT[cathode][anode] = BRIGHT[cathode][COUNT_ANODES - 1 - anode] = bright;
+  }
+}
+
+static inline void DisableLed(uint8_t anode, uint8_t cathode)
+{
+  if(cathode < COUNT_CATHODES || anode < COUNT_ANODES)
+  {
+    LED[cathode] &= ~(1 << anode);
+  }
+}
+
+static inline void DisableLedMirror(uint8_t anode, uint8_t cathode)
+{
+  if(cathode < COUNT_CATHODES || anode < COUNT_ANODES)
+  {
+    LED[cathode] &= ~((1 << anode) | (1 << (COUNT_ANODES - 1 - anode)));
+  }
+}
+
 void effect_start(TIM_HandleTypeDef * _htim)
 {
   if(!started)
@@ -247,6 +281,30 @@ void effect_print(char * text)
 
 static LED_SavedStateType circlesaving;
 
+void effect_backlightcircle(int time, float anglestart, float angles, float length)
+{
+  anglestart /= 360.0f;
+  angles /= 360.0f;
+  length /= 360.0f;
+
+  float delay = 1000 / REFRESH_RATE * 1.5f;
+  float divider = time / delay;
+  float anglestep = angles / divider + length / divider;
+  float curfrom = 0;
+  float curto = 0;
+  for(float i = 0; i <= divider; i += 1.f)
+  {
+    effect_savestate(&circlesaving);
+    curto += anglestep;
+    curfrom = curto - length;
+    if(curfrom < 0.f) curfrom = 0;
+    if(curto > angles) curfrom = angles;
+    effect_setbacklightpercentfromto(curfrom + anglestart, curto + anglestart);
+    osDelay(delay);
+    effect_restorestate(&circlesaving);
+  }
+}
+
 void effect_circle(int time, float anglestart, float angles, float length)
 {
   anglestart /= 360.0f;
@@ -266,6 +324,7 @@ void effect_circle(int time, float anglestart, float angles, float length)
     if(curfrom < 0.f) curfrom = 0;
     if(curto > angles) curfrom = angles;
     effect_setpercentfromto(curfrom + anglestart, curto + anglestart);
+    effect_setbacklightpercentfromto(curfrom + anglestart, curto + anglestart);
     osDelay(delay);
     effect_restorestate(&circlesaving);
   }
@@ -274,13 +333,15 @@ void effect_circle(int time, float anglestart, float angles, float length)
 /*
 dir = 0 - just fill;
 dir = 1 - cockwhise
-2 - reverse
+2 - corner to full
 3 - from top to bottom
 4 - Random fill
 */
 uint16_t notfilled[COUNT_ANODES*COUNT_CATHODES];
 void effect_fill_special(uint8_t dir)
 {
+  uint16_t notfilledcnt;
+  uint32_t random = 0;
   float percent;
 	if(dir == 0)
 	{
@@ -308,8 +369,8 @@ void effect_fill_special(uint8_t dir)
 		LED[21] |= 0x4800;
 		LED[22] |= 0x3000;
 	}
-	else if(dir == 1)
-	{
+  else if(dir == 1)
+  {
     int time = 500;
     float delay = 1000 / REFRESH_RATE * 1.5f;
     float divider = time / delay;
@@ -320,17 +381,42 @@ void effect_fill_special(uint8_t dir)
       effect_setpercent(percent);
       osDelay(delay);
     }
-	}
+  }
+  else if(dir == 2)
+  {
+    const float anglesiterations = 4.5f;
+    const int iterations = 20;
+    const int time = 500;
+    effect_fill_special(0);
+
+    for(float i = 1; i >= 0; i-= 1 / iterations)
+    {
+      for(float r = 0; r <= 3.141593f; r += anglesiterations / 180.0f * 3.141593f)
+      {
+        int a_index = roundf((1.0f / EDGE_HEARTH_SIZE) * (r / 3.141593f));
+        int c_index = roundf((1.0f / EDGE_HEARTH_SIZE) * (r / 3.141593f));
+
+        if(a_index >= EDGE_HEARTH_SIZE / 2) a_index = EDGE_HEARTH_SIZE / 2 - 1;
+        if(c_index >= EDGE_HEARTH_SIZE / 2) c_index = EDGE_HEARTH_SIZE / 2 - 1;
+
+        float a = sinf(r) * (i * EDGE_HEARTH_ANODES[a_index]) + (COUNT_ANODES / 2.0f) - 0.5f;
+        float c = cosf(r) * (i * EDGE_HEARTH_CATHODES[c_index]) + (COUNT_CATHODES / 2.0f) - 0.5f;
+
+        EnableLedMirror(roundf(a),roundf(c), BRIGHT_MAX);
+      }
+      osDelay(time / iterations);
+    }
+
+
+
+  }
 	else if(dir == 4)
 	{
-		uint16_t notfilledcnt;
-		uint32_t random = 0;
-		uint8_t i,j;
 		while(1)
 		{
 			notfilledcnt = 0;
-			for(i=0;i<COUNT_CATHODES;i++)
-				for(j=0;j<COUNT_ANODES;j++)
+			for(int i=0;i<COUNT_CATHODES;i++)
+				for(int j=0;j<COUNT_ANODES;j++)
 					if(((TABLE_AND[i] & 1) << j) == 1 && ((LED[i]>>j)&1) == 0)
 						notfilled[notfilledcnt++] = (i*COUNT_ANODES)+j;
 			if(notfilledcnt == 0) break;

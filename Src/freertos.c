@@ -1,24 +1,3 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * File Name          : freertos.c
-  * Description        : Code for freertos applications
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2020 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under Ultimate Liberty license
-  * SLA0044, the "License"; You may not use this file except in compliance with
-  * the License. You may obtain a copy of the License at:
-  *                             www.st.com/SLA0044
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
-
-/* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
 #include "task.h"
 #include "effects.h"
@@ -378,8 +357,8 @@ void StartPlaybackTask(void *argument)
   uint16_t * initialpntr;
 
   mp3Handler = MP3InitDecoder();
-  queueDacL = osMessageQueueNew(16, sizeof(uint8_t), NULL);
-  queueDacR = osMessageQueueNew(16, sizeof(uint8_t), NULL);
+  queueDacL = osMessageQueueNew(1, sizeof(uint8_t), NULL);
+  queueDacR = osMessageQueueNew(1, sizeof(uint8_t), NULL);
   queueSpiResetRx = osMessageQueueNew(2, sizeof(uint8_t), NULL);
   queueSpiResetTx = osMessageQueueNew(2, sizeof(uint8_t), NULL);
   queueBufferNumber = osMessageQueueNew(FLASH_BUFFER_COUNT - 1, sizeof(uint8_t), NULL);
@@ -407,7 +386,10 @@ void StartPlaybackTask(void *argument)
         DacBufferL[i] = DacBufferR[i] = 512;
       SCB_CleanDCache_by_Addr((uint32_t*)DacBufferL, curbuffersize * sizeof(uint16_t));
       SCB_CleanDCache_by_Addr((uint32_t*)DacBufferR, curbuffersize * sizeof(uint16_t));
-      status = osMessageQueueGet(queueSpiResetRx, &message, 0, 1000);
+      do
+      {
+        status = osMessageQueueGet(queueSpiResetRx, &message, 0, 1000);
+      } while(status != osOK);
       size = 0;
       continue;
     }
@@ -458,12 +440,12 @@ void StartPlaybackTask(void *argument)
       StartPlayback(mp3Info.outputSamps);
     else continue;
 
-    status = osMessageQueueGet(queueDacL, &message, NULL, 150);
+    status = osMessageQueueGet(queueDacL, &message, NULL, 200);
     if(status != osOK) continue;
     else if(message == BUFFER_HALF_CPLT) DacPointerL = 0;
     else if(message == BUFFER_FULL_CPLT) DacPointerL = curbuffersize / 2;
 
-    status = osMessageQueueGet(queueDacR, &message, NULL, 150);
+    status = osMessageQueueGet(queueDacR, &message, NULL, 200);
     if(status != osOK) continue;
     else if(message == BUFFER_HALF_CPLT) DacPointerR = 0;
     else if(message == BUFFER_FULL_CPLT) DacPointerR = curbuffersize / 2;
@@ -534,6 +516,7 @@ void StartSpiReadTask(void *argument)
         if(status == osOK)
         {
           address = 0;
+          osMessageQueueReset(queueBufferNumber);
           status = osMessageQueuePut(queueSpiResetRx, &message, 0, 50);
         }
       }
