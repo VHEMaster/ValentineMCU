@@ -18,6 +18,14 @@ static const osMutexAttr_t mutexAttrs = {
 static uint8_t tx[32] __attribute__((aligned(32)));
 static uint8_t rx[32] __attribute__((aligned(32)));
 
+inline void SST25_ErrorCallback(SPI_HandleTypeDef * _hspi)
+{
+  if(_hspi == hspi)
+  {
+
+  }
+}
+
 inline void SST25_TxCpltCallback(SPI_HandleTypeDef * _hspi)
 {
   if(_hspi == hspi)

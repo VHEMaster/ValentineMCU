@@ -14,7 +14,7 @@ void out_updatecharginglevel(float level)
 void out_charging(void)
 {
   uint8_t charging_tick = 1;
-  int8_t menu = 0;
+  int8_t menu = -1;
   effect_fill(0);
   for(int y = 0; y < COUNT_CATHODES; y++)
     for(int x = 0; x < COUNT_ANODES; x++)
@@ -48,7 +48,7 @@ void out_charging(void)
         for(int x = 8; x <= 16; x++)
           LED[y] |= (1 << x);
 
-      effect_circle(500, 0.f, 360.f, 90.f);
+      effect_circle(800, 0.f, 360.f, 60.f);
       effect_fill_special(1);
       effect_decreasebright(1000, BRIGHT_MAX / 3);
       while(fChargingLevel >= 1.f)
@@ -77,7 +77,7 @@ void out_charging(void)
       osDelay(500);
       if(menu != 0)
       {
-        effect_circle(700, 0.f, 720.f, 90.f);
+        effect_circle(1000, 0.f, 360.f * 3, 60.f);
       }
       menu = 0;
     }
@@ -140,10 +140,8 @@ static LED_SavedStateType state_nolet;
 void out_main(void)
 {
   effect_boot();
-  effect_backlightcircle(500, 0, -360, -20);
-  osDelay(100);
-  effect_circle(500, 0, 360, 20);
-  osDelay(100);
+  effect_backlightcircle(800, 0, 360, 20);
+  effect_circle(800, 0, 360, 50);
   effect_fill_special(3);
   osDelay(1000);
   effect_decreasebright(800, BRIGHT_MAX / 3);
@@ -174,11 +172,11 @@ void out_main(void)
 
   effect_fill(0);
   osDelay(1000);
-  effect_print("");
+  effect_print("Hiiiii");
   effect_fill_special(3);
   osDelay(1000);
 
-  effect_print("");
+  effect_print("Heeey");
   osDelay(1000);
   effect_fill_special(4);
   osDelay(500);

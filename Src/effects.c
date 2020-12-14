@@ -120,13 +120,13 @@ void effect_start(TIM_HandleTypeDef * _htim)
   if(!started)
   {
     htim = _htim;
-    htim->Instance->ARR = HAL_RCC_GetPCLK1Freq() * 2.f / REFRESH_RATE / (BRIGHT_MAX + 1) / COUNT_CATHODES;
+    htim->Instance->ARR = (HAL_RCC_GetPCLK1Freq() * 2.f) / REFRESH_RATE / (BRIGHT_MAX + 3) / COUNT_CATHODES;
     irq_counter = 0;
-    irq_brightcounter = -1;
+    irq_brightcounter = -3;
     AnodesDisable();
     CathodesDisable();
     effect_fill(0);
-    HAL_GPIO_WritePin(MCU_MATRIX_EN_GPIO_Port, MCU_MATRIX_EN_Pin, GPIO_PIN_SET);
+    //HAL_GPIO_WritePin(MCU_MATRIX_EN_GPIO_Port, MCU_MATRIX_EN_Pin, GPIO_PIN_SET);
     HAL_TIM_Base_Start_IT(htim);
     started = 1;
   }
@@ -141,21 +141,21 @@ void effect_stop(void)
     AnodesDisable();
     CathodesDisable();
     irq_counter = 0;
-    irq_brightcounter = -1;
+    irq_brightcounter = -3;
     started = 0;
   }
 }
 
 
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *_htim)
 {
-  if(htim->Instance == TIM7)
+  if(_htim == htim)
   {
     if(++irq_brightcounter >= BRIGHT_MAX)
     {
       AnodesDisable();
       CathodesDisable();
-      irq_brightcounter = -1;
+      irq_brightcounter = -3;
       if(++irq_counter >= COUNT_CATHODES)
       {
         irq_counter = 0;
@@ -163,13 +163,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       }
 
     }
-    else
+    else if(irq_brightcounter >= 0)
     {
       CathodeEnable(irq_counter);
 
       uint32_t data = LED[irq_counter] & TABLE_AND[irq_counter];
       for(int a = 0; a < COUNT_ANODES; a++)
-          data &= ~((BRIGHT[irq_counter][a] > irq_brightcounter) << a);
+          data &= ~((BRIGHT[irq_counter][a] <= irq_brightcounter) << a);
 
       AnodesEnable(data);
     }
@@ -220,22 +220,22 @@ void effect_boot(void)
 
 
 static char tempstr[255] = {' ',' ',' ',' ',' ',0};
-static uint32_t original_br[7][COUNT_ANODES];
-static uint32_t original[7];
+static uint32_t original_br[8][COUNT_ANODES];
+static uint32_t original[8];
 
 void effect_putch(char ch, uint8_t x, uint8_t y)
 {
 
 	uint8_t k,l;
 	
-	for(k=0;k<7;k++)
+	for(k=0;k<8;k++)
 	{
 		original[k] = LED[k+y];
 		for(l=0;l<COUNT_ANODES;l++)
 			original_br[k][l] = BRIGHT[k+y][l];
 	}
 	
-	for(k=0;k<7;k++)
+	for(k=0;k<8;k++)
 	{
 		LED[k+y] = original[k];
 		LED[k+y] |= font_get(ch,k)<<x;
@@ -254,7 +254,7 @@ void effect_print(char * text)
 	tempstr[length+4] = 0;
 	length = strlen(tempstr);
 	
-	for(k=0;k<7;k++)
+	for(k=0;k<8;k++)
 	{
 		original[k] = LED[k+5];
 		for(i=0;i<COUNT_ANODES;i++)
@@ -266,7 +266,7 @@ void effect_print(char * text)
 	{
 		for(j=0;j<6;j++)
 		{
-			for(k=0;k<7;k++)
+			for(k=0;k<8;k++)
 			{
 				LED[k+5] = original[k];
 				LED[k+5] |= font_get(tempstr[i],k)>>j;
@@ -289,7 +289,7 @@ void effect_backlightcircle(int time, float anglestart, float angles, float leng
 
   float delay = 1000 / REFRESH_RATE * 1.5f;
   float divider = time / delay;
-  float anglestep = angles / divider + length / divider;
+  float anglestep = (angles) / divider;// + length / divider;
   float curfrom = 0;
   float curto = 0;
   for(float i = 0; i <= divider; i += 1.f)
@@ -298,7 +298,8 @@ void effect_backlightcircle(int time, float anglestart, float angles, float leng
     curto += anglestep;
     curfrom = curto - length;
     if(curfrom < 0.f) curfrom = 0;
-    if(curto > angles) curfrom = angles;
+    if(curto > angles) curto = angles;
+    if(curfrom > curto) curfrom = curto;
     effect_setbacklightpercentfromto(curfrom + anglestart, curto + anglestart);
     osDelay(delay);
     effect_restorestate(&circlesaving);
@@ -313,7 +314,7 @@ void effect_circle(int time, float anglestart, float angles, float length)
 
   float delay = 1000 / REFRESH_RATE * 1.5f;
   float divider = time / delay;
-  float anglestep = angles / divider + length / divider;
+  float anglestep = angles / divider;// + length / divider;
   float curfrom = 0;
   float curto = 0;
   for(float i = 0; i <= divider; i += 1.f)
@@ -322,7 +323,8 @@ void effect_circle(int time, float anglestart, float angles, float length)
     curto += anglestep;
     curfrom = curto - length;
     if(curfrom < 0.f) curfrom = 0;
-    if(curto > angles) curfrom = angles;
+    if(curto > angles) curto = angles;
+    if(curfrom > curto) curfrom = curto;
     effect_setpercentfromto(curfrom + anglestart, curto + anglestart);
     effect_setbacklightpercentfromto(curfrom + anglestart, curto + anglestart);
     osDelay(delay);
@@ -371,7 +373,7 @@ void effect_fill_special(uint8_t dir)
 	}
   else if(dir == 1)
   {
-    int time = 500;
+    const int time = 1000;
     float delay = 1000 / REFRESH_RATE * 1.5f;
     float divider = time / delay;
     for(float i = 0; i <= divider; i += 1.f)
@@ -386,7 +388,7 @@ void effect_fill_special(uint8_t dir)
   {
     const float anglesiterations = 4.5f;
     const int iterations = 20;
-    const int time = 500;
+    const int time = 700;
     effect_fill_special(0);
 
     for(float i = 1; i >= 0; i-= 1 / iterations)
@@ -431,7 +433,7 @@ void effect_fill_special(uint8_t dir)
 	}
 	else if(dir == 3)
 	{
-	  int time = 500;
+	  int time = 700;
 	  float delay = 1000 / REFRESH_RATE * 1.5f;
 	  float divider = time / delay;
 	  for(float i = 0; i <= divider; i += 1.f)
@@ -606,8 +608,10 @@ void effect_setbacklightpercent(float percent)
   }
   LED[COUNT_CATHODES - 1] |= (1 << index);
   BRIGHT[COUNT_CATHODES - 1][index] = brightness;
-  //for(int i = index + 1; i < COUNT_ANODES; i++)
-  //  BRIGHT[COUNT_CATHODES - 1][i] = 0;
+
+  for(int i = index + 1; i < COUNT_ANODES; i++)
+    if((LED[COUNT_CATHODES - 1] & (1 << i)) == 0)
+      BRIGHT[COUNT_CATHODES - 1][i] = 0;
 
   LED[COUNT_CATHODES - 1] = 0x3FFFFFF;
 }
@@ -620,7 +624,7 @@ void effect_setbacklighttwohalfspercent(float percent)
   else if(percent >= 1.f) index = (COUNT_ANODES / 2) - 1, brightness = BRIGHT_MAX;
   else
   {
-    index = percent * COUNT_ANODES;
+    index = percent * COUNT_ANODES / 2;
     brightness = fmodf(percent, 1.f / (COUNT_ANODES / 2)) * (COUNT_ANODES / 2) * BRIGHT_MAX;
   }
 
@@ -633,8 +637,14 @@ void effect_setbacklighttwohalfspercent(float percent)
   }
   LED[COUNT_CATHODES - 1] |= (1 << index) | (1 << (COUNT_ANODES - 1 - index));
   BRIGHT[COUNT_CATHODES - 1][index] = BRIGHT[COUNT_CATHODES - 1][COUNT_ANODES - 1 - index] = brightness;
-  //for(int i = index + 1; i < COUNT_ANODES / 2; i++)
-  //  BRIGHT[COUNT_CATHODES - 1][i] = BRIGHT[COUNT_CATHODES - 1][COUNT_ANODES - 1 - i] = 0;
+
+  for(int i = index + 1; i < COUNT_ANODES / 2; i++)
+  {
+    if((LED[COUNT_CATHODES - 1] & (1 << i)) == 0)
+      BRIGHT[COUNT_CATHODES - 1][i] = 0;
+    if((LED[COUNT_CATHODES - 1] & (1 << (COUNT_ANODES - 1 - i))) == 0)
+      BRIGHT[COUNT_CATHODES - 1][COUNT_ANODES - 1 - i] = 0;
+  }
 
 }
 
@@ -663,9 +673,14 @@ void effect_settwohalfspercent(float percent)
   LED[EDGE_HEARTH_CATHODES[EDGE_HEARTH_SIZE - 1 - index]] |= 1 << EDGE_HEARTH_ANODES[EDGE_HEARTH_SIZE - 1 - index];
   BRIGHT[EDGE_HEARTH_CATHODES[index]][EDGE_HEARTH_ANODES[index]] =
       BRIGHT[EDGE_HEARTH_CATHODES[EDGE_HEARTH_SIZE - 1 - index]][EDGE_HEARTH_ANODES[EDGE_HEARTH_SIZE - 1 - index]] = brightness;
-  //for(int i = index + 1; i < count; i++)
-  //  BRIGHT[EDGE_HEARTH_CATHODES[i]][EDGE_HEARTH_ANODES[i]] =
-  //    BRIGHT[EDGE_HEARTH_CATHODES[EDGE_HEARTH_SIZE - 1 - index]][EDGE_HEARTH_ANODES[EDGE_HEARTH_SIZE - 1 - index]] = 0;
+  for(int i = index + 1; i < count; i++)
+  {
+    if((LED[EDGE_HEARTH_CATHODES[i]] & (1 << EDGE_HEARTH_ANODES[i])) == 0)
+      BRIGHT[EDGE_HEARTH_CATHODES[i]][EDGE_HEARTH_ANODES[i]] = 0;
+
+    if((LED[EDGE_HEARTH_CATHODES[EDGE_HEARTH_SIZE - 1 - index]] & (1 << EDGE_HEARTH_ANODES[EDGE_HEARTH_SIZE - 1 - index])) == 0)
+      BRIGHT[EDGE_HEARTH_CATHODES[EDGE_HEARTH_SIZE - 1 - index]][EDGE_HEARTH_ANODES[EDGE_HEARTH_SIZE - 1 - index]] = 0;
+  }
 
 }
 
@@ -690,8 +705,9 @@ void effect_setpercent(float percent)
   }
   LED[EDGE_HEARTH_CATHODES[index]] |= 1 << EDGE_HEARTH_ANODES[index];
   BRIGHT[EDGE_HEARTH_CATHODES[index]][EDGE_HEARTH_ANODES[index]] = brightness;
-  //for(int i = index + 1; i < count; i++)
-  //  BRIGHT[EDGE_HEARTH_CATHODES[i]][EDGE_HEARTH_ANODES[i]]  = 0;
+  for(int i = index + 1; i < count; i++)
+    if((LED[EDGE_HEARTH_CATHODES[i]] & (1 << EDGE_HEARTH_ANODES[i])) == 0)
+      BRIGHT[EDGE_HEARTH_CATHODES[i]][EDGE_HEARTH_ANODES[i]]  = 0;
 
 }
 
@@ -699,12 +715,12 @@ void effect_setbacklightpercentfromto(float percentfrom, float percentto)
 {
   const int count = COUNT_ANODES;
   uint8_t indexfrom = 0;
-  uint8_t brightnessfrom = 0;
   uint8_t indexto = 0;
+  uint8_t brightnessfrom = 0;
   uint8_t brightnessto = 0;
 
   indexfrom = percentfrom * count;
-  brightnessfrom = fmodf(percentfrom, 1.f / count) * count * BRIGHT_MAX;
+  brightnessfrom = (1.0f - fmodf(percentfrom, 1.f / count) * count) * BRIGHT_MAX;
   indexto = percentto * count;
   brightnessto = fmodf(percentto, 1.f / count) * count * BRIGHT_MAX;
 
@@ -738,7 +754,7 @@ void effect_setpercentfromto(float percentfrom, float percentto)
   uint8_t brightnessto = 0;
 
   indexfrom = percentfrom * count;
-  brightnessfrom = fmodf(percentfrom, 1.f / count) * count * BRIGHT_MAX;
+  brightnessfrom = (1.0f - fmodf(percentfrom, 1.f / count) * count) * BRIGHT_MAX;
   indexto = percentto * count;
   brightnessto = fmodf(percentto, 1.f / count) * count * BRIGHT_MAX;
 

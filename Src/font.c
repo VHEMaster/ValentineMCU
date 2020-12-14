@@ -78,7 +78,7 @@ static char ascii_rus_decode(char ansii)
 
 uint8_t font_get(char addr, uint8_t n)
 {
-  uint8_t fnt[7];
+  uint8_t fnt[8] = {0,0,0,0,0,0,0,0};
   addr = ascii_rus_decode(addr);
   switch(addr)
   {
@@ -1176,9 +1176,10 @@ uint8_t font_get(char addr, uint8_t n)
       fnt[1] = 0b000000;
       fnt[2] = 0b000000;
       fnt[3] = 0b000000;
-      fnt[4] = 0b000110;
-      fnt[5] = 0b000100;
-      fnt[6] = 0b000010;
+      fnt[4] = 0b000000;
+      fnt[5] = 0b000110;
+      fnt[6] = 0b000100;
+      fnt[7] = 0b000010;
       break;
     case 0x2D :
       fnt[0] = 0b000000;
@@ -1195,26 +1196,28 @@ uint8_t font_get(char addr, uint8_t n)
       fnt[2] = 0b000000;
       fnt[3] = 0b000000;
       fnt[4] = 0b000000;
-      fnt[5] = 0b001100;
+      fnt[5] = 0b000000;
       fnt[6] = 0b001100;
+      fnt[7] = 0b001100;
       break;
     case 0x3A :
       fnt[0] = 0b000000;
-      fnt[1] = 0b001100;
-      fnt[2] = 0b001100;
-      fnt[3] = 0b000000;
-      fnt[4] = 0b001100;
-      fnt[5] = 0b001100;
-      fnt[6] = 0b000000;
+      fnt[1] = 0b000000;
+      fnt[2] = 0b011000;
+      fnt[3] = 0b011000;
+      fnt[4] = 0b000000;
+      fnt[5] = 0b011000;
+      fnt[6] = 0b011000;
       break;
     case 0x3B :
       fnt[0] = 0b000000;
-      fnt[1] = 0b001100;
+      fnt[1] = 0b000000;
       fnt[2] = 0b001100;
-      fnt[3] = 0b000000;
-      fnt[4] = 0b001100;
-      fnt[5] = 0b001000;
-      fnt[6] = 0b000100;
+      fnt[3] = 0b001100;
+      fnt[4] = 0b000000;
+      fnt[5] = 0b001100;
+      fnt[6] = 0b001000;
+      fnt[7] = 0b000100;
       break;
     case 0x3C :
       fnt[0] = 0b010000;
@@ -1299,6 +1302,8 @@ uint8_t font_get(char addr, uint8_t n)
     case 4 : return fnt[4];
     case 5 : return fnt[5];
     case 6 : return fnt[6];
+    case 7 : return fnt[7];
+    default : return 0;
   }
   return 0;
 }
