@@ -213,7 +213,7 @@ void StartControlTask(void *argument)
         HAL_GPIO_WritePin(MCU_CE_GPIO_Port, MCU_CE_Pin, GPIO_PIN_SET);
         if(IS_CHARGING && !IS_CHARGED)
         {
-          temp = adcCHRG - 3.5f * 1.43f;
+          temp = (adcCHRG - 3.8f) * 2.5f;
           if(temp > 1.f) temp = 0.98f;
           else if(temp < 0.f) temp = 0.f;
           out_updatecharginglevel(temp);
@@ -239,14 +239,12 @@ void StartControlTask(void *argument)
       usb_period = 0;
     }
 
-    if(adcVBAT < 3.3f)
+    if(adcVBAT < 3.5f)
     {
-      if(currentStatus == CS_Working)
-      {
-        if(currentStatus != CS_BatteryLow && low_period > 5000)
+        if(low_period > 2000)
           currentStatus = CS_BatteryLow;
         low_period += period;
-      }
+
     }
     else
     {

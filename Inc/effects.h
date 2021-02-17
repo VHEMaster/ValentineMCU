@@ -22,9 +22,10 @@ extern void effect_backlightcircle(int time, float anglestart, float angles, flo
 extern void effect_fill_special(uint8_t dir);
 extern void effect_boot(void);
 extern void effect_fill(uint8_t k);
-extern void effect_print(char * text);
+extern void effect_print(char * text, int delay);
 extern void effect_decreasebright(uint32_t time, uint8_t value);
 extern void effect_removebright(uint32_t time);
+extern void effect_smile1(void);
 extern void effect_smile(void);
 extern void effect_savestate(LED_SavedStateType * data);
 extern void effect_restorestate(LED_SavedStateType * data);

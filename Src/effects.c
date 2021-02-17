@@ -243,9 +243,10 @@ void effect_putch(char ch, uint8_t x, uint8_t y)
 }
 
 
-void effect_print(char * text)
+void effect_print(char * text, int delay)
 {
 	uint8_t i,j,k,l;
+	uint32_t leds;
 	uint8_t length = strlen(text);
 	for(i=0;i<length;i++)
 		tempstr[i+4] = text[i];
@@ -268,12 +269,18 @@ void effect_print(char * text)
 		{
 			for(k=0;k<8;k++)
 			{
-				LED[k+5] = original[k];
-				LED[k+5] |= font_get(tempstr[i],k)>>j;
+				leds = original[k];
+				leds |= font_get(tempstr[i],k)>>j;
 				for(l=0;l<4;l++)
-					LED[k+5] |= ((font_get(tempstr[i+l+1],k))<<((6-j)+(l*6)));
+				{
+				  leds |= ((font_get(tempstr[i+l+1],k))<<((6-j)+(l*6)));
+				}
+        LED[k+5] = leds;
+        for(int m = 0; m < COUNT_ANODES; m++)
+          if(((leds >> m) & 1) && ((original[k] >> m) & 1) == 0)
+            BRIGHT[k+5][m] = BRIGHT_MAX;
 			}
-			osDelay(90);
+			osDelay(delay);
 		}
 	}
 }
@@ -386,31 +393,67 @@ void effect_fill_special(uint8_t dir)
   }
   else if(dir == 2)
   {
-    const float anglesiterations = 4.5f;
-    const int iterations = 20;
-    const int time = 700;
-    effect_fill_special(0);
+    const float anglesiteration = 3.5f;
+    const float iterations = 50;
+    const float time = 600;
 
-    for(float i = 1; i >= 0; i-= 1 / iterations)
+    effect_fill_special(0);
+    osDelay(time / iterations);
+
+    int anode;
+    int cathode;
+
+    for(float i = 1.3f; i >= 0; i-= 1 / iterations)
     {
-      for(float r = 0; r <= 3.141593f; r += anglesiterations / 180.0f * 3.141593f)
+      for(float r = 0; r <= 3.141593f; r += anglesiteration / 180.0f * 3.141593f)
       {
-        int a_index = roundf((1.0f / EDGE_HEARTH_SIZE) * (r / 3.141593f));
-        int c_index = roundf((1.0f / EDGE_HEARTH_SIZE) * (r / 3.141593f));
+        int a_index = roundf((EDGE_HEARTH_SIZE / 2.0f) * (r / 3.141593f));
+        int c_index = roundf((EDGE_HEARTH_SIZE / 2.0f) * (r / 3.141593f));
 
         if(a_index >= EDGE_HEARTH_SIZE / 2) a_index = EDGE_HEARTH_SIZE / 2 - 1;
         if(c_index >= EDGE_HEARTH_SIZE / 2) c_index = EDGE_HEARTH_SIZE / 2 - 1;
 
-        float a = sinf(r) * (i * EDGE_HEARTH_ANODES[a_index]) + (COUNT_ANODES / 2.0f) - 0.5f;
-        float c = cosf(r) * (i * EDGE_HEARTH_CATHODES[c_index]) + (COUNT_CATHODES / 2.0f) - 0.5f;
+        if(i-0.3f >= 0.0f && i-0.3f <= 1.0f)
+        {
+          float a = ((i-0.3f) * ((float)EDGE_HEARTH_ANODES[a_index]-((float)COUNT_ANODES / 2.0f))) + ((float)COUNT_ANODES / 2.0f);
+          float c = ((i-0.3f) * ((float)EDGE_HEARTH_CATHODES[c_index]-((float)COUNT_ANODES / 2.0f))) + ((float)COUNT_CATHODES / 2.0f);
 
-        EnableLedMirror(roundf(a),roundf(c), BRIGHT_MAX);
+          anode = roundf(a);
+          cathode = roundf(c);
+
+          if(cathode < COUNT_CATHODES || a < COUNT_ANODES)
+          {
+            LED[cathode] |= (1 << anode) | (1 << (COUNT_ANODES - 1 - anode));
+            BRIGHT[cathode][anode] = BRIGHT[cathode][COUNT_ANODES - 1 - anode] = BRIGHT_MAX;
+
+          }
+        }
+
       }
+
+      for(float r = 0; r <= 3.141593f; r += anglesiteration / 180.0f * 3.141593f)
+      {
+        int a_index = roundf((EDGE_HEARTH_SIZE / 2.0f) * (r / 3.141593f));
+        int c_index = roundf((EDGE_HEARTH_SIZE / 2.0f) * (r / 3.141593f));
+
+        if(a_index >= EDGE_HEARTH_SIZE / 2) a_index = EDGE_HEARTH_SIZE / 2 - 1;
+        if(c_index >= EDGE_HEARTH_SIZE / 2) c_index = EDGE_HEARTH_SIZE / 2 - 1;
+
+        if(i >= 0.0f && i <= 1.0f)
+        {
+          float a = (i * ((float)EDGE_HEARTH_ANODES[a_index]-((float)COUNT_ANODES / 2.0f))) + ((float)COUNT_ANODES / 2.0f);
+          float c = (i * ((float)EDGE_HEARTH_CATHODES[c_index]-((float)COUNT_ANODES / 2.0f))) + ((float)COUNT_CATHODES / 2.0f);
+
+          anode = roundf(a);
+          cathode = roundf(c);
+          DisableLedMirror(anode,cathode);
+        }
+      }
+      effect_fill_special(0);
+
       osDelay(time / iterations);
     }
-
-
-
+    osDelay(500);
   }
 	else if(dir == 4)
 	{
@@ -419,7 +462,7 @@ void effect_fill_special(uint8_t dir)
 			notfilledcnt = 0;
 			for(int i=0;i<COUNT_CATHODES;i++)
 				for(int j=0;j<COUNT_ANODES;j++)
-					if(((TABLE_AND[i] & 1) << j) == 1 && ((LED[i]>>j)&1) == 0)
+					if(((TABLE_AND[i] >> j) & 1) == 1 && (((LED[i]>>j)&1) == 0 || BRIGHT[i][j] != BRIGHT_MAX))
 						notfilled[notfilledcnt++] = (i*COUNT_ANODES)+j;
 			if(notfilledcnt == 0) break;
 			HAL_RNG_GenerateRandomNumber(&hrng, &random);
@@ -466,52 +509,56 @@ void effect_fill_special(uint8_t dir)
 		osDelay(100);
 	}
 }
+void effect_smile1(void)
+{
+  LED[5]  |= 0x10000;
+  osDelay(50);
+  LED[5]  |= 0x18000;
+  osDelay(50);
+  LED[5]  |= 0x1C000;
+  osDelay(50);
+  LED[6]  |= 0x04000;
+  osDelay(50);
+  LED[7]  |= 0x04000;
+  osDelay(50);
+  LED[7]  |= 0x0C000;
+  osDelay(50);
+  LED[7]  |= 0x1C000;
+  osDelay(50);
+  LED[6]  |= 0x14000;
+
+  osDelay(100);
+
+  LED[5]  |= 0x1C800;
+  osDelay(50);
+  LED[5]  |= 0x1CC00;
+  osDelay(50);
+  LED[5]  |= 0x1CE00;
+  osDelay(50);
+  LED[6]  |= 0x14200;
+  osDelay(50);
+  LED[7]  |= 0x1C200;
+  osDelay(50);
+  LED[7]  |= 0x1C600;
+  osDelay(50);
+  LED[7]  |= 0x1CE00;
+  osDelay(50);
+  LED[6]  |= 0x14A00;
+
+  osDelay(100);
+
+  LED[12]  |= 0x3000;
+  osDelay(150);
+  LED[11]  |= 0x4800;
+  osDelay(150);
+  LED[10]  |= 0x8400;
+  osDelay(150);
+  LED[9]  |= 0x10200;
+}
 
 void effect_smile(void)
 {
-		LED[5]  |= 0x10000;
-		osDelay(50);
-		LED[5]  |= 0x18000;
-		osDelay(50);
-		LED[5]  |= 0x1C000;
-		osDelay(50);
-		LED[6]  |= 0x04000;
-		osDelay(50);
-		LED[7]  |= 0x04000;
-		osDelay(50);
-		LED[7]  |= 0x0C000;
-		osDelay(50);
-		LED[7]  |= 0x1C000;
-		osDelay(50);
-		LED[6]  |= 0x14000;
-	
-		osDelay(100);
-	
-		LED[5]  |= 0x1C800;
-		osDelay(50);
-		LED[5]  |= 0x1CC00;
-		osDelay(50);
-		LED[5]  |= 0x1CE00;
-		osDelay(50);
-		LED[6]  |= 0x14200;
-		osDelay(50);
-		LED[7]  |= 0x1C200;
-		osDelay(50);
-		LED[7]  |= 0x1C600;
-		osDelay(50);
-		LED[7]  |= 0x1CE00;
-		osDelay(50);
-		LED[6]  |= 0x14A00;
-		
-		osDelay(100);
-		
-		LED[12]  |= 0x3000;
-		osDelay(150);
-		LED[11]  |= 0x4800;
-		osDelay(150);
-		LED[10]  |= 0x8400;
-		osDelay(150);
-		LED[9]  |= 0x10200;
+    effect_smile1();
 		osDelay(1000);
 		
 		

@@ -111,6 +111,9 @@ extern void StartSpiReadTask(void *argument);
   * @brief  The application entry point.
   * @retval int
   */
+
+#define IS_DEBUGGER_ATTACHED() (DBGMCU->CR & 0x07)
+
 int main(void)
 {
   /* USER CODE BEGIN 1 */
@@ -145,10 +148,17 @@ int main(void)
   MX_ADC1_Init();
   MX_RNG_Init();
   MX_SPI4_Init();
-  MX_TIM1_Init();
+  if(!IS_DEBUGGER_ATTACHED())
+    MX_TIM1_Init();
   MX_TIM4_Init();
   MX_TIM7_Init();
   MX_TIM8_Init();
+
+  __HAL_DBGMCU_FREEZE_IWDG();
+  __HAL_DBGMCU_FREEZE_TIM1();
+  __HAL_DBGMCU_FREEZE_TIM4();
+  __HAL_DBGMCU_FREEZE_TIM7();
+  __HAL_DBGMCU_FREEZE_TIM8();
 
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
