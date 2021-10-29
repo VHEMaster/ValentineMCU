@@ -4,3 +4,6 @@
 *.su
 *.d
 makefile
+/Debug
+/*.launch
+/.settings
